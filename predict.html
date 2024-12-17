@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Earthquake Prediction App</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f4f4f9;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      overflow-y: auto;
+      text-align: center;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 20px;
+      color: #4CAF50;
+    }
+    p {
+      font-size: 1rem;
+      margin-bottom: 20px;
+    }
+    .container {
+      max-width: 900px;
+      width: 100%;
+      background: #fff;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      margin-bottom: 30px; /* Add spacing at the bottom */
+    }
+    input[type="text"] {
+      padding: 12px;
+      border: 2px solid #ccc;
+      border-radius: 5px;
+      font-size: 16px;
+      width: 300px;
+      margin-bottom: 15px;
+    }
+    button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 5px;
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    #map {
+      width: 100%;
+      height: 400px;
+      margin-top: 30px;
+      border-radius: 10px;
+    }
+    #output {
+      margin-top: 20px;
+      font-size: 1.1rem;
+      color: #333;
+      padding: 20px;
+      background-color: #e8f5e9;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      display: inline-block;
+      max-width: 100%;
+    }
+    /* Style for the chatbot iframe */
+    #chatbot-container {
+      width: 100%;
+      max-width: 100%; /* Match width of map */
+      height: 500px;
+      margin-top: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Earthquake Prediction App</h1>
+    <p>Enter your city name to get the latest earthquake prediction and safety advice:</p>
+    <input type="text" id="cityInput" placeholder="Enter city name" />
+    <button onclick="generatePrediction()">Predict</button>
+
+    <div id="output"></div>
+    <div id="map"></div>
+
+    <!-- Chatbot iframe -->
+    <div id="chatbot-container">
+      <iframe src="https://quakelytics.lovable.app/" title="Earthquake Relief Chatbot"></iframe>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <script>
+    let map, marker, circle, safeLocationMarker;
+
+    // Function to initialize the map
+    function initializeMap(lat = 37.7749, lng = -122.4194, radius = 10000) {
+      map = L.map('map').setView([lat, lng], 12); // Default view for San Francisco
+
+      // Tile Layer for OpenStreetMap
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      // Add marker and circle representing the affected area
+      addMarkerAndCircle(lat, lng, radius);
+    }
+
+    function addMarkerAndCircle(lat, lng, radius) {
+      // Remove previous marker, circle, and safe location marker if they exist
+      if (marker) marker.remove();
+      if (circle) circle.remove();
+      if (safeLocationMarker) safeLocationMarker.remove();
+
+      // Add marker for the earthquake's location
+      marker = L.marker([lat, lng]).addTo(map).bindPopup("Earthquake Location");
+
+      // Add a circle representing the affected radius
+      circle = L.circle([lat, lng], {
+        color: 'red',
+        fillColor: '#FF0000',
+        fillOpacity: 0.2,
+        radius: radius
+      }).addTo(map);
+
+      // Adjust map view to fit the circle bounds
+      map.fitBounds(circle.getBounds());
+    }
+
+    async function getCityCoordinates(city) {
+      // Fetch city coordinates using OpenStreetMap's Nominatim geocoding API (supports global cities)
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?city=${city}&format=json&addressdetails=1`);
+      const data = await response.json();
+      
+      // Check if the city was found
+      if (data && data.length > 0) {
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      } else {
+        alert("City not found. Please try another.");
+        return null;
+      }
+    }
+
+    function generatePrediction() {
+      const city = document.getElementById('cityInput').value.trim();
+      const outputDiv = document.getElementById('output');
+
+      if (!city) {
+        outputDiv.innerHTML = `<p style="color: red;">Please enter a valid city name!</p>`;
+        return;
+      }
+
+      getCityCoordinates(city).then(coordinates => {
+        if (coordinates) {
+          const { lat, lng } = coordinates;
+
+          // Predicted magnitude range from 5.0 to 8.0 (random prediction)
+          const predictedMagnitude = (Math.random() * (8.0 - 5.0) + 5.0).toFixed(1);
+
+          // Affected radius based on magnitude (for simplicity, we use these fixed values)
+          let affectedRadius;
+          switch (true) {
+            case (predictedMagnitude >= 7.5):
+              affectedRadius = 500000; // 500 km for magnitude 7.5 and above
+              break;
+            case (predictedMagnitude >= 6.5):
+              affectedRadius = 200000; // 200 km for magnitude 6.5+
+              break;
+            case (predictedMagnitude >= 5.5):
+              affectedRadius = 100000; // 100 km for magnitude 5.5+
+              break;
+            default:
+              affectedRadius = 50000; // 50 km for smaller magnitudes
+              break;
+          }
+
+          // Safe location options (always ensuring safe location is outside the affected radius)
+          let safeLocation = { lat: lat, lng: lng }; // Start with the epicenter
+          let angle = Math.random() * 360; // Random direction in degrees
+          let distance = affectedRadius + 20000; // Safe location must be beyond the affected radius
+          safeLocation.lat = lat + (distance / 100000); // Add offset to latitude
+          safeLocation.lng = lng + (distance / 100000); // Add offset to longitude
+
+          // Ensure the safe location is not in the sea (very basic check)
+          while (isSea(safeLocation.lat, safeLocation.lng)) {
+            // Recalculate location if it's over sea (this is a simple check, you could improve this by using a real API)
+            safeLocation.lat = lat + (distance / 100000); // Add offset to latitude
+            safeLocation.lng = lng + (distance / 100000); // Add offset to longitude
+            distance += 5000; // Increase the distance to move further away
+          }
+
+          const randomRisk = ['Low', 'Moderate', 'High', 'Critical'][Math.floor(Math.random() * 4)];
+          const estimatedTime = Math.floor(Math.random() * 48 + 1); // Random time between 1 and 48 hours
+
+          // Update output with prediction and safe location
+          outputDiv.innerHTML = `
+            <h3>Earthquake Prediction for ${city}</h3>
+            <p><strong>Magnitude:</strong> ${predictedMagnitude} Richter Scale</p>
+            <p><strong>Risk Level:</strong> ${randomRisk}</p>
+            <p><strong>Estimated Time of Event:</strong> Within ${estimatedTime} hours</p>
+            <p><strong>Recommended Safe Location:</strong> Safe Shelter</p>
+          `;
+
+          // Update map with the earthquake's location and affected radius
+          addMarkerAndCircle(lat, lng, affectedRadius);
+
+          // Add a primary marker for the safe location (color it as "safe")
+          safeLocationMarker = L.circleMarker([safeLocation.lat, safeLocation.lng], {
+            radius: 10,
+            fillColor: "#4CAF50", // Green color for safety
+            color: "#4CAF50",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.7
+          }).addTo(map)
+            .bindPopup(`Safe Shelter - Recommended Location`);
+        }
+      });
+    }
+
+    // Basic function to check if coordinates are over sea (very simplified)
+    function isSea(lat, lng) {
+      // This is a very simplistic check, you could improve it by using APIs or geographic data
+      return lat < -60 || lat > 85 || lng < -180 || lng > 180;
+    }
+
+    // Initialize map with default coordinates for San Francisco
+    initializeMap();
+  </script>
+</body>
+</html>
